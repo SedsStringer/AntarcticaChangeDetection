@@ -1,5 +1,5 @@
 # AntarcticaChangeDetection
-Codes used to classify landscape change in Antarctica in Google Earth Engine
+Codes used to classify landscape change in Antarctica in Google Earth Engine (JavaScript)
 
 There are two components to this change detection: 1) Initial change detection; and 2) Application of change detection to other sites.
 
