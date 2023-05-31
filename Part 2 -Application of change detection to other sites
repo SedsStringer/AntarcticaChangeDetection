@@ -2,9 +2,7 @@
 // This code conducts change analysis for other sites and follows on from Part 1. Please ensure you have read and understood part 1 before implementing this code.
 // Please read through this script carefully, including all of the comments before implementing it.
 
-var training = ee.FeatureCollection('');
-
-
+var training = ee.FeatureCollection(''); // define training set
 
 // Define classified images you want to use
 
