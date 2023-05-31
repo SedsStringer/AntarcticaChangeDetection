@@ -204,6 +204,9 @@ var NC = changePoints.filterMetadata('Change_cod', 'equals', 0); // No change cl
 
 var changePoints = NC.merge(wi2c).merge(i2f)
                   .merge(i2t).merge(c2t).merge(c2wi).merge(f2b).merge(c2b) .merge(c2f).merge(c2v).merge(b2c).merge(f2c).merge(i2c); // select only the points with > 1 % of all the points 
+                  
+// NB: chanePoints should only contain the class to class options that you want to apply. E.g. if you don't want to classify f2c change, then do not merge it - this is particularly relevant when it comes to exporting training data for Part 2                 
+                  
 print(changePoints.size()); // check the number of remaining points 
 
 // ___________Add CVA bands - see for further inforamtion: 
