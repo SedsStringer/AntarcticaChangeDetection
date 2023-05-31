@@ -1,0 +1,254 @@
+//________CVA APPLICATION TO OTHER SITES
+// This code conducts change analysis for other sites and follows on from Part 1. Please ensure you have read and understood part 1 before implementing this code.
+// Please read through this script carefully, including all of the comments before implementing it.
+
+var training = ee.FeatureCollection('');
+
+
+
+// Define classified images you want to use
+
+var mod = ee.Image(''); // Modern/contemporary image
+var old = ee.Image(''); // Old/legacy image
+
+// Combine classified images into 1 image
+
+var combinedClass = old.addBands(mod);
+var inBands_comb = ['b1', 'b1_1'];
+var outBands_comb = ['2000', 'Modern'];
+var combinedClass = combinedClass.select(inBands_comb,outBands_comb);
+
+// Define landsat images you want to use and add NDWI, NDVI, and NDSI images 
+
+var LS2000 = ee.Image(''); // legacy landsat image 
+var LSModern = ee.Image(''); // Modern image
+
+var addNDWI = function(img) {
+  var NDWI = img.normalizedDifference(['b2', 'b4']).rename('ndwi');
+  return img.addBands(NDWI);
+}; // add ndwi band
+var addNDVI = function(img) {
+  var NDVI = img.normalizedDifference(['b4', 'b3']).rename('ndvi');
+  return img.addBands(NDVI);
+}; //add ndvi band
+var addNDSI = function(img) {
+  var NDSI = img.normalizedDifference(['b2', 'b5']).rename('ndsi');
+  return img.addBands(NDSI);
+}; // add ndsi band
+
+var with_NDWI2000 = addNDWI(LS2000);
+var with_NDVI2000 = addNDVI(with_NDWI2000);
+var LS2000 = addNDSI(with_NDVI2000); // adds the 3 ND bands to the legacy Landsat image
+
+
+var with_NDWI2000 = addNDWI(LSModern);
+var with_NDVI2000 = addNDVI(with_NDWI2000);
+var LSModern = addNDSI(with_NDVI2000); // adds the 3 ND bands to the modern Landsat image
+
+// Combine landsat images into 1 image
+
+var combinedLandsat = LS2000.addBands(LSModern);
+var inBands_landsat = ['b1', 'b2', 'b3', 'b4', 'b5', 'b6','ndwi','ndvi','ndsi','b1_1', 'b2_1', 'b3_1', 'b4_1', 'b5_1', 'b6_1','ndwi_1','ndvi_1','ndsi_1'];
+var outBands_landsat = ['blue2000', 'green2000', 'red2000', 'nir2000', 'swir1_2000', 'swir2_2000','ndwi2000','ndvi2000','ndsi2000', 'blueMod', 'greenMod', 'redMod', 'nirMod', 'swir1_Mod', 'swir2_Mod','ndwiMod','ndviMod','ndsiMod'];
+var combinedLandsat = combinedLandsat.select(inBands_landsat, outBands_landsat)
+
+// Create mask to hide: a) no data in either time; b) non-differentiated land in either time; c) Ice extent in the modern image.
+
+var coastline = ee.FeatureCollection(''); // define coastline using a shapefile/feature collection
+var combinedLandsat = combinedLandsat.clipToCollection(coastline) // clip the combined landsat image to the coastline of the site
+
+var noData2000 = old.updateMask(old.eq(0));
+var noData2000 = noData2000.reduceToVectors({
+    reducer: ee.Reducer.countEvery(), 
+    scale: 30,
+    bestEffort: true, 
+    maxPixels: 1e9
+});
+var nonDiff2000 = old.updateMask(old.eq(5));
+var nonDiff2000 = nonDiff2000.reduceToVectors({
+    reducer: ee.Reducer.countEvery(), 
+    scale: 30,
+    bestEffort: true, 
+    maxPixels: 1e9
+});
+var noDataMod = mod.updateMask(mod.eq(0));
+var noDataMod = noDataMod.reduceToVectors({
+    reducer: ee.Reducer.countEvery(), 
+    scale: 30,
+    bestEffort: true, 
+    maxPixels: 1e9
+});
+var nonDiffMod = mod.updateMask(mod.eq(5));
+var nonDiffMod = nonDiffMod.reduceToVectors({
+    reducer: ee.Reducer.countEvery(), 
+    scale: 30,
+    bestEffort: true, 
+    maxPixels: 1e9
+});
+
+var iceMod = imgModern.updateMask(imgModern.eq(4));
+var iceMod = iceMod.reduceToVectors({
+    reducer: ee.Reducer.countEvery(), 
+    scale: 30,
+    bestEffort: true, 
+    maxPixels: 1e9
+});
+
+var NAclasses = noData2000.merge(nonDiff2000).merge(noDataMod).merge(nonDiffMod).merge(iceMod);
+
+var NAmask = combinedLandsat.clipToCollection(NAclasses);
+var mask = ee.Image.constant(1).clipToCollection(NAclasses).mask().not();
+
+var combinedLandsat = combinedLandsat.updateMask(mask);
+var maskVector = mask.reduceToVectors({
+    reducer: ee.Reducer.countEvery(), 
+    scale: 30,
+    bestEffort: true, 
+    geometry: coastline.geometry(),
+    maxPixels: 1e9
+});
+
+// ADD CVA BANDS
+
+//di
+
+// ___________Add CVA bands - see for further inforamtion: 
+// Xu, R., Lin, H., Lü, Y., Luo, Y., Ren, Y., Comber, A., 2018. A Modified Change Vector Approach for Quantifying Land Cover Change. Remote Sens. 10, 1578. https://doi.org/10.3390/rs10101578. __________
+
+var bandName = ['band'];
+
+var LS2000_blue = combinedLandsat.select(['blue2000'],bandName);
+var LSMod_blue = combinedLandsat.select(['blueMod'],bandName);
+var di_blue = LSMod_blue.subtract(LS2000_blue);
+var di_bluePWR2 = di_blue.pow(2);
+var LS2000_green = combinedLandsat.select(['green2000'],bandName);
+var LSMod_green = combinedLandsat.select(['greenMod'],bandName);
+var di_green = LSMod_green.subtract(LS2000_green);
+var di_greenPWR2 = di_green.pow(2);
+var LS2000_red = combinedLandsat.select(['red2000'],bandName);
+var LSMod_red = combinedLandsat.select(['redMod'],bandName);
+var di_red = LSMod_red.subtract(LS2000_red);
+var di_redPWR2 = di_red.pow(2);
+var LS2000_nir = combinedLandsat.select(['nir2000'],bandName);
+var LSMod_nir = combinedLandsat.select(['nirMod'],bandName);
+var di_nir = LSMod_nir.subtract(LS2000_nir);
+var di_nirPWR2 = di_nir.pow(2);
+var LS2000_swir1 = combinedLandsat.select(['swir1_2000'],bandName);
+var LSMod_swir1 = combinedLandsat.select(['swir1_Mod'],bandName);
+var di_swir1 = LSMod_swir1.subtract(LS2000_swir1);
+var di_swir1PWR2 = di_swir1.pow(2);
+var LS2000_swir2 = combinedLandsat.select(['swir2_2000'],bandName);
+var LSMod_swir2 = combinedLandsat.select(['swir2_Mod'],bandName);
+var di_swir2 = LSMod_swir2.subtract(LS2000_swir2);
+var di_swir2PWR2 = di_swir2.pow(2);
+
+
+// Sum di values 
+var di_col = ee.ImageCollection([ee.Image(di_blue),ee.Image(di_green),ee.Image(di_red),ee.Image(di_nir),ee.Image(di_swir1),ee.Image(di_swir2)]);
+
+var di_sum = di_col.sum();
+
+
+// Sum di^2 values 
+var diPWR_col = ee.ImageCollection([ee.Image(di_bluePWR2),ee.Image(di_greenPWR2),ee.Image(di_redPWR2),ee.Image(di_nirPWR2),ee.Image(di_swir1PWR2),ee.Image(di_swir2PWR2)]);
+
+var diPWR_sum = diPWR_col.sum();
+
+// FINAL ED VALUE
+
+var ED = diPWR_sum.sqrt();
+var inED = ['band'];
+var outED = ['ED'];
+var ED = ED.select(inED,outED);
+
+// CALCULATE DA
+var n = 12;
+
+var nED = ED.multiply(n);
+
+var SQRTnED = nED.sqrt();
+var diDIVnED = di_sum.divide(SQRTnED);
+
+var DA = diDIVnED.acos();
+var inDA = ['band'];
+var outDA = ['DA'];
+
+var DA = DA.select(inDA,outDA);
+
+// CALCULATE SAM
+
+// Y * X
+
+var mulBlue = LS2000_blue.multiply(LSMod_blue);
+var mulGreen = LS2000_green.multiply(LSMod_green);
+var mulRed = LS2000_red.multiply(LSMod_red);
+var mulNIR = LS2000_nir.multiply(LSMod_nir);
+var mulSWIR1 = LS2000_swir1.multiply(LSMod_swir1);
+var mulSWIR2 = LS2000_swir2.multiply(LSMod_swir2);
+
+var mulSumP1 = ee.ImageCollection([mulBlue,mulGreen,mulRed,mulNIR,mulSWIR1,mulSWIR2]);
+var mulSumP2 = mulSumP1.sum();
+
+
+// Bottom line eq 4
+
+var LS2000_bluePWR2 = LS2000_blue.pow(2);
+var LS2000_greenPWR2 = LS2000_green.pow(2);
+var LS2000_redPWR2 = LS2000_red.pow(2);
+var LS2000_nirPWR2 = LS2000_nir.pow(2);
+var LS2000_swir1PWR2 = LS2000_swir1.pow(2);
+var LS2000_swir2PWR2 = LS2000_swir2.pow(2);
+
+var LSMod_bluePWR2 = LSMod_blue.pow(2);
+var LSMod_greenPWR2 = LSMod_green.pow(2);
+var LSMod_redPWR2 = LSMod_red.pow(2);
+var LSMod_nirPWR2 = LSMod_nir.pow(2);
+var LSMod_swir1PWR2 = LSMod_swir1.pow(2);
+var LSMod_swir2PWR2 = LSMod_swir2.pow(2);
+
+var eq4bottomP1 = ee.ImageCollection([LS2000_bluePWR2,LS2000_greenPWR2,LS2000_redPWR2,LS2000_nirPWR2,LS2000_swir1PWR2,LS2000_swir2PWR2, LSMod_bluePWR2,LSMod_greenPWR2,LSMod_redPWR2,LSMod_nirPWR2,LSMod_swir1PWR2,LSMod_swir2PWR2]);
+
+var eq4bottomP2 = eq4bottomP1.sum();
+
+var eq4div = mulSumP2.divide(eq4bottomP2);
+
+// final SAM calculation 
+
+var SAM = eq4div.acos();
+var inSAM = ['band'];
+var outSAM = ['SAM'];
+var SAM = SAM.select(inSAM,outSAM);
+
+// Add bands
+
+var changeRaster = ee.Image(combinedLandsat.addBands([ED,DA,SAM]));
+print(changeRaster);
+
+//___________________________________________________________
+
+// Classifier
+
+var bands = ['blue2000', 'green2000', 'red2000', 'nir2000', 'swir1_2000', 'swir2_2000','ndwi2000','ndvi2000','ndsi2000', 'blueMod', 'greenMod', 'redMod', 'nirMod', 'swir1_Mod', 'swir2_Mod','ndwiMod','ndviMod','ndsiMod','ED','DA','SAM']
+var changeRaster = changeRaster.select(bands).toFloat()
+
+var classifier = ee.Classifier.smileRandomForest(500).train({
+  features: training,
+  classProperty: 'Change_cod',
+  inputProperties: bands
+});
+
+
+var classified = changeRaster.select(bands).classify(classifier);
+var class_map = classified;
+
+print(classified)
+
+Export.image.toDrive({
+  image: classified,
+  description: 'Change_southGeorgia', //change
+  folder: 'CVA',
+  scale: 30,
+  region: img_extent,
+  maxPixels: 1e12});
+
+
